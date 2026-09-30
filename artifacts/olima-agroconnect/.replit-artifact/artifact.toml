@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "OLIMA AGROCONNECT"
+description = "A Rwanda-focused agricultural marketplace connecting farmers with buyers. Farmers manage crop listings and buyers discover produce and send requests."
+version = "1.0.0"
+id = "artifacts/olima-agroconnect"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19498
+
+[services.development]
+run = "pnpm --filter @workspace/olima-agroconnect run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/olima-agroconnect", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/olima-agroconnect/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19498"
+BASE_PATH = "/"

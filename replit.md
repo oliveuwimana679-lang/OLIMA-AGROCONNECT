@@ -1,6 +1,6 @@
-# [Project name]
+# OLIMA AGROCONNECT
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Rwanda-focused agricultural marketplace connecting farmers who list produce with buyers who browse and send purchase requests.
 
 ## Run & Operate
 
@@ -9,7 +9,7 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL` — PostgreSQL connection string; Clerk keys are provisioned by Replit Auth setup
 
 ## Stack
 
@@ -22,15 +22,21 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/olima-agroconnect` — responsive marketplace website and role-specific dashboards
+- `artifacts/api-server/src/routes/marketplace.ts` — authenticated marketplace API routes
+- `lib/api-spec/openapi.yaml` — source of truth for marketplace API contracts
+- `lib/db/src/schema/marketplace.ts` — farmer profiles, produce listings, and buyer requests
+- `artifacts/api-server/src/middlewares/clerkProxyMiddleware.ts` — production Clerk frontend API proxy
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Replit-managed Clerk handles account authentication; marketplace roles and contact/profile fields live in PostgreSQL.
+- OpenAPI-generated React Query hooks and Zod schemas keep the browser and API contracts aligned.
+- Public visitors can browse available listings; creating listings and buyer requests requires a matching signed-in role.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Visitors can explore featured Rwanda produce, farmers can manage listings and accept or decline incoming requests, and buyers can search listings and track requests they send.
 
 ## User preferences
 
@@ -38,7 +44,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Clerk's `/sign-in/*?` and `/sign-up/*?` routes and production proxy are required for OAuth callback routing; keep the Clerk wiring aligned with its skill reference.
 
 ## Pointers
 

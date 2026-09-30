@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: marketplace
+    description: OLIMA AGROCONNECT marketplace operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,248 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /market/summary:
+    get:
+      operationId: getMarketplaceSummary
+      tags: [marketplace]
+      summary: Get marketplace overview
+      responses:
+        "200":
+          description: Marketplace totals and featured listings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceSummary"
+  /profile:
+    get:
+      operationId: getMyProfile
+      tags: [marketplace]
+      summary: Get the signed-in user's marketplace profile
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          description: Authentication required
+    put:
+      operationId: saveMyProfile
+      tags: [marketplace]
+      summary: Create or update the signed-in user's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileInput"
+      responses:
+        "200":
+          description: Saved profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          description: Invalid profile
+        "401":
+          description: Authentication required
+  /products:
+    get:
+      operationId: listProducts
+      tags: [marketplace]
+      summary: Browse available produce
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: category
+          schema:
+            type: string
+        - in: query
+          name: district
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [marketplace]
+      summary: List a farm product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Invalid product
+        "401":
+          description: Authentication required
+  /products/mine:
+    get:
+      operationId: listMyProducts
+      tags: [marketplace]
+      summary: List products owned by the signed-in farmer
+      responses:
+        "200":
+          description: Farmer's products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+        "401":
+          description: Authentication required
+  /products/{id}:
+    patch:
+      operationId: updateProduct
+      tags: [marketplace]
+      summary: Update a farmer's product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Invalid product
+        "401":
+          description: Authentication required
+        "404":
+          description: Product not found
+    delete:
+      operationId: deleteProduct
+      tags: [marketplace]
+      summary: Remove a farmer's product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Product deleted
+        "401":
+          description: Authentication required
+        "404":
+          description: Product not found
+  /requests:
+    post:
+      operationId: createRequest
+      tags: [marketplace]
+      summary: Request produce from a farmer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestInput"
+      responses:
+        "201":
+          description: Created buyer request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketRequest"
+        "400":
+          description: Invalid request
+        "401":
+          description: Authentication required
+  /requests/mine:
+    get:
+      operationId: listMyRequests
+      tags: [marketplace]
+      summary: List requests made by the signed-in buyer
+      responses:
+        "200":
+          description: Buyer's requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MarketRequest"
+        "401":
+          description: Authentication required
+  /requests/incoming:
+    get:
+      operationId: listIncomingRequests
+      tags: [marketplace]
+      summary: List requests for the signed-in farmer's products
+      responses:
+        "200":
+          description: Farmer's incoming requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MarketRequest"
+        "401":
+          description: Authentication required
+  /requests/{id}:
+    patch:
+      operationId: updateRequestStatus
+      tags: [marketplace]
+      summary: Accept or decline a request for the farmer's product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestStatusInput"
+      responses:
+        "200":
+          description: Updated request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketRequest"
+        "400":
+          description: Invalid status
+        "401":
+          description: Authentication required
+        "404":
+          description: Request not found
 components:
   schemas:
     HealthStatus:
@@ -33,4 +277,101 @@ components:
           type: string
       required:
         - status
+    Profile:
+      type: object
+      required: [userId, role, fullName, phone, district]
+      properties:
+        userId: { type: string }
+        role: { type: string, enum: [farmer, buyer] }
+        fullName: { type: string }
+        phone: { type: ["string", "null"] }
+        district: { type: ["string", "null"] }
+    ProfileInput:
+      type: object
+      required: [role, fullName]
+      properties:
+        role: { type: string, enum: [farmer, buyer] }
+        fullName: { type: string, minLength: 2, maxLength: 120 }
+        phone: { type: string, maxLength: 40 }
+        district: { type: string, maxLength: 80 }
+    Product:
+      type: object
+      required: [id, farmerId, farmerName, name, category, description, pricePerKg, quantityKg, district, unit, imageUrl, available, createdAt]
+      properties:
+        id: { type: integer }
+        farmerId: { type: string }
+        farmerName: { type: string }
+        name: { type: string }
+        category: { type: string }
+        description: { type: string }
+        pricePerKg: { type: number }
+        quantityKg: { type: integer }
+        district: { type: string }
+        unit: { type: string }
+        imageUrl: { type: ["string", "null"] }
+        available: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    ProductInput:
+      type: object
+      required: [name, category, description, pricePerKg, quantityKg, district, unit]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        category: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: string, maxLength: 1200 }
+        pricePerKg: { type: number, exclusiveMinimum: 0 }
+        quantityKg: { type: integer, minimum: 1 }
+        district: { type: string, minLength: 2, maxLength: 80 }
+        unit: { type: string, maxLength: 30 }
+        imageUrl: { type: string, maxLength: 500 }
+    ProductUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        category: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: string, maxLength: 1200 }
+        pricePerKg: { type: number, exclusiveMinimum: 0 }
+        quantityKg: { type: integer, minimum: 1 }
+        district: { type: string, minLength: 2, maxLength: 80 }
+        unit: { type: string, maxLength: 30 }
+        imageUrl: { type: ["string", "null"], maxLength: 500 }
+        available: { type: boolean }
+    MarketRequest:
+      type: object
+      required: [id, productId, buyerId, farmerId, quantityKg, message, status, productName, buyerName, farmerName, pricePerKg, createdAt]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        buyerId: { type: string }
+        farmerId: { type: string }
+        quantityKg: { type: integer }
+        message: { type: string }
+        status: { type: string, enum: [pending, accepted, declined] }
+        productName: { type: string }
+        buyerName: { type: string }
+        farmerName: { type: string }
+        pricePerKg: { type: number }
+        createdAt: { type: string, format: date-time }
+    RequestInput:
+      type: object
+      required: [productId, quantityKg]
+      properties:
+        productId: { type: integer }
+        quantityKg: { type: integer, minimum: 1 }
+        message: { type: string, maxLength: 1000 }
+    RequestStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [accepted, declined] }
+    MarketplaceSummary:
+      type: object
+      required: [farmers, buyers, products, districts, featured]
+      properties:
+        farmers: { type: integer }
+        buyers: { type: integer }
+        products: { type: integer }
+        districts: { type: integer }
+        featured:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
 
