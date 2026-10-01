@@ -30,15 +30,12 @@ export function setBaseUrl(url: string | null): void {
 }
 
 /**
- * Register a getter that supplies a bearer auth token.  Before every fetch
+ * Register a getter that supplies a bearer auth token. Before every fetch
  * the getter is invoked; when it returns a non-null string, an
  * `Authorization: Bearer <token>` header is attached to the request.
  *
- * Useful for Expo bundles making token-gated API calls.
+ * Useful for web or mobile apps whose API expects an explicit bearer token.
  * Pass `null` to clear the getter.
- *
- * NOTE: This function should never be used in web applications where session
- * token cookies are automatically associated with API calls by the browser.
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;

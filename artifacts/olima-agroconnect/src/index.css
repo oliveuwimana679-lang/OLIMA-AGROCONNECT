@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&display=swap');
-@layer theme, base, clerk, components, utilities;
+@layer theme, base, components, utilities;
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -134,10 +134,6 @@
 .reveal-late { animation: rise-in .7s .1s cubic-bezier(.2,.7,.2,1) both; }
 @keyframes rise-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .product-image { background: linear-gradient(135deg, #e8dcc4, #d9e2cf); }
-.cl-cardBox { box-shadow: none !important; }
-.cl-formFieldInput::placeholder { color: #8a9184; opacity: 1; }
-.cl-footerActionLink { color: #315640 !important; }
-
 /* OLIMA — highland market ledger */
 .public-page { overflow: hidden; background: #f7f4eb; }
 .public-header { height: 78px; border-bottom: 1px solid #e7e2d6; background: rgba(249,247,239,.93); }
@@ -293,6 +289,18 @@
 .auth-bottom { position: relative; z-index: 1; color: #b7c4b5; font-size: 8px; letter-spacing: .15em; }
 .auth-main { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 44px 45px; }
 .auth-card-wrap { width: min(440px, 100%); }
+.auth-form-panel { padding: 34px; border: 1px solid #e2dccf; background: #fbf9f2; box-shadow: 0 17px 45px rgba(42,61,46,.055); }
+.auth-form-heading h2 { margin: 14px 0 8px; color: #2e4c38; font-family: var(--app-font-serif); font-size: 31px; font-weight: 500; letter-spacing: -.03em; }
+.auth-form-heading > p { margin: 0 0 24px; color: #777f73; font-size: 11px; line-height: 1.6; }
+.auth-form { display: grid; gap: 16px; }
+.auth-field { display: grid; gap: 7px; color: #4b5f4c; font-size: 10px; font-weight: 700; }
+.auth-field input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid #ddd7c9; border-radius: 5px; outline: none; color: #314b38; background: #fffdf8; font-size: 11px; font-weight: 400; transition: border-color .2s, box-shadow .2s; }
+.auth-field input:focus { border-color: #789173; box-shadow: 0 0 0 3px rgba(82,119,84,.11); }
+.auth-field input::placeholder { color: #a2a496; }
+.auth-submit { width: 100%; margin-top: 4px; }
+.auth-form-switch { margin: 20px 0 0; color: #81877c; text-align: center; font-size: 10px; }
+.auth-form-switch a { color: #315640; font-weight: 700; text-decoration: none; }
+.auth-form-switch a:hover { color: #ad563e; }
 .auth-footer { display: flex; justify-content: space-between; width: min(440px, 100%); margin-top: 23px; color: #909488; font-size: 9px; }
 .auth-footer a { color: #49664f; text-decoration: none; font-weight: 700; }
 .auth-mobile-brand { display: none; }

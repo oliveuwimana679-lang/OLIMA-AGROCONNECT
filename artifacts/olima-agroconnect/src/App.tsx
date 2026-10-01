@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  ClerkProvider,
-  Show,
-  SignIn,
-  SignUp,
-  useClerk,
-  useUser,
-} from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
-import {
   getGetMarketplaceSummaryQueryKey,
   getGetMyProfileQueryKey,
   getListIncomingRequestsQueryKey,
@@ -34,6 +24,7 @@ import {
   type ProfileRole,
 } from '@workspace/api-client-react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { SupabaseAuthProvider, useSupabaseAuth } from '@/lib/supabase-auth';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -71,64 +62,6 @@ import NotFound from '@/pages/not-found';
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 const queryClient = new QueryClient();
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
-
-function stripBase(path: string) {
-  return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
-}
-
-const appearance = {
-  theme: shadcn,
-  cssLayerName: 'clerk',
-  options: {
-    logoPlacement: 'inside' as const,
-    logoLinkUrl: basePath || '/',
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: '#315640',
-    colorForeground: '#253c30',
-    colorMutedForeground: '#758074',
-    colorDanger: '#b54a3e',
-    colorBackground: '#fbf8f0',
-    colorInput: '#fffdf8',
-    colorInputForeground: '#253c30',
-    colorNeutral: '#d9d2c2',
-    fontFamily: 'DM Sans',
-    borderRadius: '0.75rem',
-  },
-  elements: {
-    rootBox: 'w-full flex justify-center',
-    cardBox: 'bg-[#fbf8f0] rounded-2xl w-[440px] max-w-full overflow-hidden border border-[#ded8ca]',
-    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    headerTitle: 'text-[#253c30] font-semibold',
-    headerSubtitle: 'text-[#687569]',
-    socialButtonsBlockButtonText: 'text-[#253c30] font-medium',
-    formFieldLabel: 'text-[#354a3b] font-medium',
-    footerActionLink: 'text-[#315640] font-semibold',
-    footerActionText: 'text-[#687569]',
-    dividerText: 'text-[#758074]',
-    identityPreviewEditButton: 'text-[#315640]',
-    formFieldSuccessText: 'text-[#315640]',
-    alertText: 'text-[#9d4035]',
-    logoBox: 'rounded-xl',
-    logoImage: 'w-10 h-10 object-contain',
-    socialButtonsBlockButton: 'border-[#d9d2c2] bg-[#fffdf8] rounded-xl',
-    formButtonPrimary: 'bg-[#315640] hover:bg-[#284a36] rounded-xl shadow-none',
-    formFieldInput: 'bg-[#fffdf8] border-[#d9d2c2] rounded-xl text-[#253c30]',
-    footerAction: 'text-[#687569]',
-    dividerLine: 'bg-[#e3ddcf]',
-    alert: 'bg-[#f7e9e3] border-[#edd0c6]',
-    otpCodeFieldInput: 'bg-[#fffdf8] border-[#d9d2c2] rounded-lg',
-    formFieldRow: 'gap-1.5',
-    main: 'gap-5',
-  },
-};
 
 type Notice = { tone: 'success' | 'error'; text: string } | null;
 
@@ -266,12 +199,9 @@ function dateLabel(value: string) {
 }
 
 function HomeRedirect() {
-  return (
-    <>
-      <Show when="signed-out"><HomePage /></Show>
-      <Show when="signed-in"><SignedInDestination /></Show>
-    </>
-  );
+  const { user, isLoading } = useSupabaseAuth();
+  if (isLoading) return <PageLoading />;
+  return user ? <SignedInDestination /> : <HomePage />;
 }
 
 function SignedInDestination() {
@@ -393,27 +323,105 @@ function HomePage() {
   );
 }
 
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    let previous: string | null | undefined;
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (previous !== undefined && previous !== userId) queryClient.clear();
-      previous = userId;
-    });
-    return unsubscribe;
-  }, [addListener, queryClient]);
-  return null;
-}
-
 function SignInPage() {
-  return <AuthFrame mode="sign-in"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} /></AuthFrame>;
+  return <AuthForm mode="sign-in" />;
 }
 
 function SignUpPage() {
-  return <AuthFrame mode="sign-up"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} forceRedirectUrl={`${basePath}/complete-profile`} /></AuthFrame>;
+  return <AuthForm mode="sign-up" />;
+}
+
+function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+  const { signIn, signUp } = useSupabaseAuth();
+  const [, setLocation] = useLocation();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+  const isSignUp = mode === 'sign-up';
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setNotice(null);
+    try {
+      if (isSignUp) {
+        const hasSession = await signUp(email.trim(), password);
+        if (hasSession) {
+          setLocation('/complete-profile');
+          return;
+        }
+        setNotice({
+          tone: 'success',
+          text: 'Check your inbox for a confirmation link. After confirming, you can finish your marketplace profile.',
+        });
+      } else {
+        await signIn(email.trim(), password);
+        setLocation('/');
+      }
+    } catch {
+      setNotice({
+        tone: 'error',
+        text: isSignUp
+          ? 'We couldn’t create your account. Check your details or sign in if you already registered.'
+          : 'We couldn’t sign you in with those details. Check your email and password and try again.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AuthFrame mode={mode}>
+      <section className="auth-form-panel">
+        <div className="auth-form-heading">
+          <span className="eyebrow"><span className="eyebrow-line" />{isSignUp ? 'JOIN THE MARKET' : 'WELCOME BACK'}</span>
+          <h2>{isSignUp ? 'Create your account.' : 'Sign in to Olima.'}</h2>
+          <p>{isSignUp ? 'Use your email to get started with local produce trading.' : 'Your marketplace is ready when you are.'}</p>
+        </div>
+        <NoticeBar notice={notice} onClose={() => setNotice(null)} />
+        <form className="auth-form" onSubmit={submit}>
+          <label className="auth-field">
+            Email address
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              maxLength={254}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              data-testid="input-auth-email"
+            />
+          </label>
+          <label className="auth-field">
+            Password
+            <input
+              type="password"
+              required
+              minLength={8}
+              maxLength={128}
+              autoComplete={isSignUp ? 'new-password' : 'current-password'}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={isSignUp ? 'At least 8 characters' : 'Your password'}
+              data-testid="input-auth-password"
+            />
+          </label>
+          <Button type="submit" disabled={busy || !email.trim() || password.length < 8} className="auth-submit" testId="button-auth-submit">
+            {busy ? (isSignUp ? 'Creating account…' : 'Signing in…') : (isSignUp ? 'Create my account' : 'Sign in')}
+            <ArrowRight size={17} />
+          </Button>
+        </form>
+        <p className="auth-form-switch">
+          {isSignUp ? 'Already have an account?' : 'New to Olima?'}{' '}
+          <Link href={isSignUp ? '/sign-in' : '/sign-up'} data-testid="link-auth-switch">
+            {isSignUp ? 'Sign in' : 'Create an account'}
+          </Link>
+        </p>
+      </section>
+    </AuthFrame>
+  );
 }
 
 function AuthFrame({ mode, children }: { mode: 'sign-in' | 'sign-up'; children: ReactNode }) {
@@ -427,7 +435,7 @@ function AuthFrame({ mode, children }: { mode: 'sign-in' | 'sign-up'; children: 
       <div className="auth-main">
         <div className="auth-mobile-brand"><Brand /></div>
         <div className="auth-card-wrap">{children}</div>
-        <div className="auth-footer"><Link href="/" data-testid="link-auth-home">Back to marketplace</Link><span>Secure sign-in powered by Clerk</span></div>
+        <div className="auth-footer"><Link href="/" data-testid="link-auth-home">Back to marketplace</Link><span>Secure sign-in powered by Supabase</span></div>
       </div>
       <span className="auth-decoration"><Sprout size={62} strokeWidth={0.8} /></span>
       <span className="auth-mode mono">{mode === 'sign-in' ? 'WELCOME BACK' : 'JOIN THE MARKET'}</span>
@@ -436,27 +444,30 @@ function AuthFrame({ mode, children }: { mode: 'sign-in' | 'sign-up'; children: 
 }
 
 function CompleteProfilePage() {
-  const { user } = useUser();
+  const { user } = useSupabaseAuth();
   const profile = useGetMyProfile();
   const save = useSaveMyProfile();
   const client = useQueryClient();
   const [, setLocation] = useLocation();
+  const metadataRole = user?.user_metadata?.role;
   const [role, setRole] = useState<ProfileRole>(() => {
     const saved = sessionStorage.getItem('olima-selected-role');
-    return saved === 'farmer' || saved === 'buyer' ? saved : 'farmer';
+    if (saved === 'farmer' || saved === 'buyer') return saved;
+    return metadataRole === 'buyer' ? 'buyer' : 'farmer';
   });
-  const [fullName, setFullName] = useState(user?.fullName || '');
+  const userFullName = typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
+  const [fullName, setFullName] = useState(userFullName);
   const [phone, setPhone] = useState('');
   const [district, setDistrict] = useState('');
   const [notice, setNotice] = useState<Notice>(null);
   useEffect(() => {
     if (profile.data) {
       setRole(profile.data.role);
-      setFullName(profile.data.fullName || user?.fullName || '');
+       setFullName(profile.data.fullName || userFullName);
       setPhone(profile.data.phone || '');
       setDistrict(profile.data.district || '');
     }
-  }, [profile.data, user?.fullName]);
+  }, [profile.data, userFullName]);
   useEffect(() => {
     if (profile.data) sessionStorage.removeItem('olima-selected-role');
   }, [profile.data]);
@@ -512,12 +523,10 @@ function CompleteProfilePage() {
 }
 
 function ProtectedRoute({ role, children }: { role: ProfileRole; children: (profile: Profile) => ReactNode }) {
-  return (
-    <>
-      <Show when="signed-out"><Redirect to="/sign-in" /></Show>
-      <Show when="signed-in"><RoleWorkspace role={role}>{children}</RoleWorkspace></Show>
-    </>
-  );
+  const { user, isLoading } = useSupabaseAuth();
+  if (isLoading) return <PageLoading />;
+  if (!user) return <Redirect to="/sign-in" />;
+  return <RoleWorkspace role={role}>{children}</RoleWorkspace>;
 }
 
 function RoleWorkspace({ role, children }: { role: ProfileRole; children: (profile: Profile) => ReactNode }) {
@@ -529,11 +538,19 @@ function RoleWorkspace({ role, children }: { role: ProfileRole; children: (profi
 }
 
 function WorkspaceShell({ profile, children }: { profile: Profile; children: ReactNode }) {
-  const { signOut } = useClerk();
-  const [location] = useLocation();
+  const { signOut } = useSupabaseAuth();
+  const [location, setLocation] = useLocation();
   const [mobileMenu, setMobileMenu] = useState(false);
   const isFarmer = profile.role === 'farmer';
   const dashboardHref = isFarmer ? '/farmer' : '/buyer';
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      setLocation('/');
+    } catch {
+      setLocation('/sign-in');
+    }
+  };
   const navItems = [
     { href: dashboardHref, label: 'Overview', icon: <Package size={17} /> },
     { href: `${dashboardHref}?view=${isFarmer ? 'requests' : 'sent'}`, label: isFarmer ? 'Buyer requests' : 'My requests', icon: <HandCoins size={17} /> },
@@ -549,7 +566,7 @@ function WorkspaceShell({ profile, children }: { profile: Profile; children: Rea
         </nav>
         <div className="sidebar-bottom">
           <div className="market-live"><span className="live-dot" /><span><strong>Marketplace live</strong><small>Listings update as they change</small></span></div>
-          <button className="workspace-user" onClick={() => signOut({ redirectUrl: basePath || '/' })} data-testid="button-sign-out">
+          <button className="workspace-user" onClick={() => void handleSignOut()} data-testid="button-sign-out">
             <span className="user-avatar">{initials(profile.fullName)}</span><span className="user-details"><strong>{profile.fullName}</strong><small>{profile.district || 'Rwanda'}</small></span><LogOut size={16} />
           </button>
         </div>
@@ -843,43 +860,33 @@ function PageLoading() {
   return <main className="page-loading"><Brand /><LoadingBlock label="Loading your marketplace" /></main>;
 }
 
+function AuthenticatedOnly({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useSupabaseAuth();
+  if (isLoading) return <PageLoading />;
+  return user ? <>{children}</> : <Redirect to="/sign-in" />;
+}
+
 function AuthRoutes() {
-  const [, setLocation] = useLocation();
   return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
-      appearance={appearance}
-      signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
-      localization={{
-        signIn: { start: { title: 'Welcome back', subtitle: 'Sign in to your Olima market account' } },
-        signUp: { start: { title: 'Join the marketplace', subtitle: 'Create an account to get started' } },
-      }}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
-      <QueryClientProvider client={queryClient}>
-        <ClerkQueryClientCacheInvalidator />
+    <QueryClientProvider client={queryClient}>
+      <SupabaseAuthProvider>
         <Switch>
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignUpPage} />
           <Route path="/complete-profile">
-            <Show when="signed-out"><Redirect to="/sign-in" /></Show>
-            <Show when="signed-in"><CompleteProfilePage /></Show>
+            <AuthenticatedOnly><CompleteProfilePage /></AuthenticatedOnly>
           </Route>
           <Route path="/farmer"><ProtectedRoute role="farmer">{(profile) => <FarmerDashboard profile={profile} />}</ProtectedRoute></Route>
           <Route path="/buyer"><ProtectedRoute role="buyer">{(profile) => <BuyerDashboard profile={profile} />}</ProtectedRoute></Route>
           <Route component={NotFound} />
         </Switch>
-      </QueryClientProvider>
-    </ClerkProvider>
+      </SupabaseAuthProvider>
+    </QueryClientProvider>
   );
 }
 
 function App() {
-  if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
   return (
     <WouterRouter base={basePath}>
       <AuthRoutes />

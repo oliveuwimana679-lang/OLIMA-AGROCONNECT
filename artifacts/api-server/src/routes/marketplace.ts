@@ -1,4 +1,3 @@
-import { getAuth } from "@clerk/express";
 import { alias } from "drizzle-orm/pg-core";
 import { and, count, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { Router, type IRouter, type Request, type Response } from "express";
@@ -30,24 +29,65 @@ import {
   marketRequestsTable,
   productsTable,
 } from "@workspace/db";
+import {
+  getSupabaseAuthContext,
+} from "../middlewares/supabaseAuthMiddleware";
+import {
+  readSupabaseProfile,
+  upsertSupabaseProfile,
+} from "../lib/supabase-profiles";
 
 const router: IRouter = Router();
 
-function authenticatedUserId(req: Request, res: Response): string | undefined {
-  const userId = getAuth(req).userId;
-  if (!userId) {
+function authenticatedUserId(_req: Request, res: Response): string | undefined {
+  const auth = getSupabaseAuthContext(res);
+  if (!auth) {
     res.status(401).json({ error: "Authentication required" });
     return undefined;
   }
-  return userId;
+  return auth.userId;
 }
 
-async function getProfile(userId: string) {
-  const [profile] = await db
-    .select()
-    .from(marketProfilesTable)
-    .where(eq(marketProfilesTable.userId, userId));
-  return profile;
+async function getProfile(userId: string, res: Response) {
+  const auth = getSupabaseAuthContext(res);
+  if (!auth) {
+    res.status(401).json({ error: "Authentication required" });
+    return undefined;
+  }
+  try {
+    const remoteProfile = await readSupabaseProfile(userId, auth.accessToken);
+    if (
+      !remoteProfile ||
+      (remoteProfile.role !== "farmer" && remoteProfile.role !== "buyer") ||
+      !remoteProfile.full_name?.trim()
+    ) {
+      return undefined;
+    }
+
+    const [marketProfile] = await db
+      .insert(marketProfilesTable)
+      .values({
+        userId,
+        role: remoteProfile.role,
+        fullName: remoteProfile.full_name.trim(),
+        phone: remoteProfile.phone,
+        district: null,
+      })
+      .onConflictDoUpdate({
+        target: marketProfilesTable.userId,
+        set: {
+          role: remoteProfile.role,
+          fullName: remoteProfile.full_name.trim(),
+          phone: remoteProfile.phone,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return marketProfile;
+  } catch {
+    res.status(502).json({ error: "Could not load your profile from Supabase" });
+    return undefined;
+  }
 }
 
 async function fetchProducts(condition?: SQL, limit?: number) {
@@ -142,7 +182,8 @@ router.get("/profile", async (req, res): Promise<void> => {
   const userId = authenticatedUserId(req, res);
   if (!userId) return;
 
-  const profile = await getProfile(userId);
+  const profile = await getProfile(userId, res);
+  if (res.headersSent) return;
   if (!profile) {
     res.status(404).json({ error: "Profile not found" });
     return;
@@ -158,6 +199,28 @@ router.put("/profile", async (req, res): Promise<void> => {
   const parsed = SaveMyProfileBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const auth = getSupabaseAuthContext(res);
+  if (!auth) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  try {
+    await upsertSupabaseProfile(
+      {
+        id: userId,
+        role: parsed.data.role,
+        full_name: parsed.data.fullName.trim(),
+        phone: parsed.data.phone?.trim() || null,
+        email: auth.email,
+      },
+      auth.accessToken,
+    );
+  } catch {
+    res.status(502).json({ error: "Could not save your profile to Supabase" });
     return;
   }
 
@@ -220,7 +283,8 @@ router.get("/products/mine", async (req, res): Promise<void> => {
   const userId = authenticatedUserId(req, res);
   if (!userId) return;
 
-  const profile = await getProfile(userId);
+  const profile = await getProfile(userId, res);
+  if (res.headersSent) return;
   if (!profile || profile.role !== "farmer") {
     res.status(403).json({ error: "Farmer account required" });
     return;
@@ -240,7 +304,8 @@ router.post("/products", async (req, res): Promise<void> => {
     return;
   }
 
-  const profile = await getProfile(userId);
+  const profile = await getProfile(userId, res);
+  if (res.headersSent) return;
   if (!profile || profile.role !== "farmer") {
     res.status(403).json({ error: "Farmer account required" });
     return;
@@ -281,7 +346,8 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const profile = await getProfile(userId);
+  const profile = await getProfile(userId, res);
+  if (res.headersSent) return;
   if (!profile || profile.role !== "farmer") {
     res.status(403).json({ error: "Farmer account required" });
     return;
@@ -346,7 +412,8 @@ router.post("/requests", async (req, res): Promise<void> => {
     return;
   }
 
-  const profile = await getProfile(userId);
+  const profile = await getProfile(userId, res);
+  if (res.headersSent) return;
   if (!profile || profile.role !== "buyer") {
     res.status(403).json({ error: "Buyer account required" });
     return;
@@ -389,7 +456,8 @@ router.get("/requests/mine", async (req, res): Promise<void> => {
   const userId = authenticatedUserId(req, res);
   if (!userId) return;
 
-  const profile = await getProfile(userId);
+  const profile = await getProfile(userId, res);
+  if (res.headersSent) return;
   if (!profile || profile.role !== "buyer") {
     res.status(403).json({ error: "Buyer account required" });
     return;
@@ -403,7 +471,8 @@ router.get("/requests/incoming", async (req, res): Promise<void> => {
   const userId = authenticatedUserId(req, res);
   if (!userId) return;
 
-  const profile = await getProfile(userId);
+  const profile = await getProfile(userId, res);
+  if (res.headersSent) return;
   if (!profile || profile.role !== "farmer") {
     res.status(403).json({ error: "Farmer account required" });
     return;
@@ -429,7 +498,8 @@ router.patch("/requests/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const profile = await getProfile(userId);
+  const profile = await getProfile(userId, res);
+  if (res.headersSent) return;
   if (!profile || profile.role !== "farmer") {
     res.status(403).json({ error: "Farmer account required" });
     return;
